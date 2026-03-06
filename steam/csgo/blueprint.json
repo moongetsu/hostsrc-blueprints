@@ -1,0 +1,236 @@
+{
+    "_comment": "DO NOT EDIT: FILE GENERATED AUTOMATICALLY BY PTERODACTYL PANEL - PTERODACTYL.IO",
+    "meta": {
+        "version": "PTDL_v2",
+        "update_url": null
+    },
+    "exported_at": "2026-03-06T15:25:14+00:00",
+    "name": "Counter-Strike: Global Offensive",
+    "author": "alex@hostsrc.com",
+    "description": "Counter-Strike: Global Offensive is a multiplayer first-person shooter video game developed by Hidden Path Entertainment and Valve Corporation.",
+    "features": [
+        "query",
+        "query:counterstrike2"
+    ],
+    "docker_images": {
+        "ghcr.io\/parkervcp\/steamcmd:sniper": "ghcr.io\/parkervcp\/steamcmd:sniper",
+        "ghcr.io\/parkervcp\/games:source": "ghcr.io\/parkervcp\/games:source"
+    },
+    "file_denylist": [],
+    "startup": ".\/srcds_run -game csgo -console +game_type {{GAME_TYPE}} +game_mode {{GAME_MODE}} +ip 0.0.0.0 -port {{SERVER_PORT}} +map {{SRCDS_MAP}} -norestart +sv_setsteamaccount {{STEAM_ACC}} -tickrate {{SRCDS_TICKRATE}} +mapgroup {{SRCDS_MAPGROUP}} -maxplayers_override {{MAX_PLAYERS}} $( [ \"$NOBOTS\" == \"0\" ] || printf %s '-nobots' ) $( [ \"$NOMASTER\" == \"0\" ] || printf %s '-nomaster' ) $( [ \"$INSECURE\" == \"0\" ] || printf %s '-insecure' ) $( [ \"$NOHLTV\" == \"0\" ] || printf %s '-nohltv' ) -autoupdate -steam_dir \/home\/container\/steamcmd -steamcmd_script \/home\/container\/steamcmd\/{{SRCDS_APPID}}_update.txt -timeout 10 -debuglog logs\/latest.log -nobreakpad",
+    "config": {
+        "files": "{}",
+        "startup": "{\r\n    \"done\": \"Connection to Steam servers successful\",\r\n    \"userInteraction\": []\r\n}",
+        "logs": "{\r\n    \"custom\": true,\r\n    \"location\": \"logs\/latest.log\"\r\n}",
+        "stop": "quit"
+    },
+    "scripts": {
+        "installation": {
+            "script": "#!\/bin\/bash\r\n# steamcmd Base Installation Script\r\n#\r\n# Server Files: \/mnt\/server\r\napt -y update\r\napt -y --no-install-recommends install curl lib32gcc-s1 libstdc++6 lib32stdc++6 ca-certificates git\r\n\r\n## just in case someone removed the defaults.\r\nif [ \"${STEAM_USER}\" == \"\" ]; then\r\n    STEAM_USER=anonymous\r\n    STEAM_PASS=\"\"\r\n    STEAM_AUTH=\"\"\r\nfi\r\n\r\n## Install options (set to \"true\" to enable)\r\nINSTALL_METAMOD=\"${INSTALL_METAMOD:-true}\"\r\nINSTALL_SOURCEMOD=\"${INSTALL_SOURCEMOD:-true}\"\r\nINSTALL_NOLOBBY=\"${INSTALL_NOLOBBY:-true}\"\r\n\r\n## download and install steamcmd\r\ncd \/tmp\r\nmkdir -p \/mnt\/server\/steamcmd\r\ncurl -sSL -o steamcmd.tar.gz https:\/\/steamcdn-a.akamaihd.net\/client\/installer\/steamcmd_linux.tar.gz\r\ntar -xzvf steamcmd.tar.gz -C \/mnt\/server\/steamcmd\r\nmkdir -p \/mnt\/server\/steamapps # Fix steamcmd disk write error when this folder is missing\r\ncd \/mnt\/server\/steamcmd\r\n\r\n# SteamCMD fails otherwise for some reason, even running as root.\r\n# This is changed at the end of the install process anyways.\r\nchown -R root:root \/mnt\r\nexport HOME=\/mnt\/server\r\n\r\n## install game using steamcmd\r\n.\/steamcmd.sh +login ${STEAM_USER} ${STEAM_PASS} ${STEAM_AUTH} +force_install_dir \/mnt\/server +app_update ${SRCDS_APPID} ${EXTRA_FLAGS} validate +quit\r\n\r\n## set up 32 bit libraries\r\nmkdir -p \/mnt\/server\/.steam\/sdk32\r\ncp -v linux32\/steamclient.so ..\/.steam\/sdk32\/steamclient.so\r\n\r\n## set up 64 bit libraries\r\nmkdir -p \/mnt\/server\/.steam\/sdk64\r\ncp -v linux64\/steamclient.so ..\/.steam\/sdk64\/steamclient.so\r\n\r\n## AUTOUPDATE FILE\r\n{\r\n    echo '@ShutdownOnFailedCommand 1'\r\n    echo '@NoPromptForPassword 1'\r\n    echo 'login anonymous'\r\n    echo \"force_install_dir ..\/\"\r\n    echo \"app_update ${SRCDS_APPID}\"\r\n    echo 'quit'\r\n} > \"${HOME}\/steamcmd\/${SRCDS_APPID}_update.txt\"\r\n\r\n## Fix Steam & App ID\r\nln -sf \/mnt\/server\/steamcmd\/steamcmd.sh \/mnt\/server\/steamcmd\/steam.sh\r\nsed -i 's\/appID=730\/appID=4465480\/' \/mnt\/server\/csgo\/steam.inf\r\n\r\n## CS:GO addon installation\r\nCSGO_DIR=\"\/mnt\/server\/csgo\"\r\nmkdir -p \"${CSGO_DIR}\"\r\n\r\necho \"-----------------------------------------\"\r\necho \"Installing Metamod:Source...\"\r\necho \"-----------------------------------------\"\r\ncd \/tmp\r\ncurl -sSL -o metamod.tar.gz https:\/\/mms.alliedmods.net\/mmsdrop\/2.0\/mmsource-2.0.0-git1389-linux.tar.gz\r\ntar -xzvf metamod.tar.gz -C \"${CSGO_DIR}\"\r\necho \"Metamod:Source installation completed.\"\r\n\r\necho \"-----------------------------------------\"\r\necho \"Installing SourceMod...\"\r\necho \"-----------------------------------------\"\r\ncd \/tmp\r\ncurl -sSL -o sourcemod.tar.gz https:\/\/sm.alliedmods.net\/smdrop\/1.13\/sourcemod-1.13.0-git7297-linux.tar.gz\r\ntar -xzvf sourcemod.tar.gz -C \"${CSGO_DIR}\"\r\necho \"SourceMod installation completed.\"\r\n\r\n###\r\necho \"-----------------------------------------\"\r\necho \"Installing NoLobbyReservation...\"\r\necho \"-----------------------------------------\"\r\ncd \/tmp\r\ngit clone https:\/\/github.com\/eldoradoel\/NoLobbyReservation.git\r\n\r\nPLUGINS_DIR=\"${CSGO_DIR}\/addons\/sourcemod\/plugins\"\r\nSCRIPTING_DIR=\"${CSGO_DIR}\/addons\/sourcemod\/scripting\"\r\nGAMEDATA_DIR=\"${CSGO_DIR}\/addons\/sourcemod\/gamedata\"\r\n\r\nmkdir -p \"${PLUGINS_DIR}\" \"${SCRIPTING_DIR}\" \"${GAMEDATA_DIR}\"\r\n\r\n# Copy .sp to scripting dir\r\ncp -v NoLobbyReservation\/csgo\/addons\/sourcemod\/scripting\/nolobbyreservation.sp \"${SCRIPTING_DIR}\/\"\r\ncp -v NoLobbyReservation\/csgo\/addons\/sourcemod\/gamedata\/nolobbyreservation.games.txt \"${GAMEDATA_DIR}\/\"\r\n\r\n# Compile using SourceMod's compiler\r\ncd \"${SCRIPTING_DIR}\"\r\nchmod +x compile.sh\r\n.\/compile.sh nolobbyreservation.sp\r\n\r\n# Move compiled plugin to plugins dir\r\nif [ -f \"compiled\/nolobbyreservation.smx\" ]; then\r\n    mv -v compiled\/nolobbyreservation.smx \"${PLUGINS_DIR}\/\"\r\n    echo \"NoLobbyReservation compiled and installed successfully.\"\r\nelse\r\n    echo \"ERROR: Compilation failed. Check scripting\/compile.sh output above.\"\r\nfi\r\n\r\nrm -rf \/tmp\/NoLobbyReservation\r\necho \"NoLobbyReservation installation completed.\"\r\n\r\n## install end\r\necho \"-----------------------------------------\"\r\necho \"Installation completed...\"\r\necho \"-----------------------------------------\"",
+            "container": "ghcr.io\/pterodactyl\/installers:debian",
+            "entrypoint": "bash"
+        }
+    },
+    "variables": [
+        {
+            "name": "Map",
+            "description": "The default map for the server.",
+            "env_variable": "SRCDS_MAP",
+            "default_value": "de_dust2",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|alpha_dash|max:32",
+            "field_type": "text"
+        },
+        {
+            "name": "Steam Account Token",
+            "description": "The Steam Account Token required for the server to be displayed publicly. Site: https:\/\/steamcommunity.com\/dev\/managegameservers",
+            "env_variable": "STEAM_ACC",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|alpha_num|size:32",
+            "field_type": "text"
+        },
+        {
+            "name": "Source AppID",
+            "description": "Required for installation and autoupdate. Do not modify.",
+            "env_variable": "SRCDS_APPID",
+            "default_value": "740",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "required|integer",
+            "field_type": "text"
+        },
+        {
+            "name": "Host Workshop Collection ID",
+            "description": "",
+            "env_variable": "WS_COLLECTION_ID",
+            "default_value": "\"\"",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|integer",
+            "field_type": "text"
+        },
+        {
+            "name": "Workshop Start Map",
+            "description": "",
+            "env_variable": "WS_START_MAP",
+            "default_value": "\"\"",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:32",
+            "field_type": "text"
+        },
+        {
+            "name": "Auth Key",
+            "description": "https:\/\/steamcommunity.com\/dev\/apikey",
+            "env_variable": "AUTH_KEY",
+            "default_value": "\"\"",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:32",
+            "field_type": "text"
+        },
+        {
+            "name": "Steam Dir",
+            "description": "",
+            "env_variable": "STEAM_DIR",
+            "default_value": "\/home\/container\/steamcmd",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "nullable|string|max:128",
+            "field_type": "text"
+        },
+        {
+            "name": "Tickrate",
+            "description": "",
+            "env_variable": "SRCDS_TICKRATE",
+            "default_value": "128",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|integer|min:33|max:128",
+            "field_type": "text"
+        },
+        {
+            "name": "Game Mode",
+            "description": "",
+            "env_variable": "GAME_MODE",
+            "default_value": "0",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|integer|min:0|max:6",
+            "field_type": "text"
+        },
+        {
+            "name": "Game Type",
+            "description": "",
+            "env_variable": "GAME_TYPE",
+            "default_value": "0",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|integer|min:0|max:6",
+            "field_type": "text"
+        },
+        {
+            "name": "Map Group",
+            "description": "The map group\/rotation for the server.",
+            "env_variable": "SRCDS_MAPGROUP",
+            "default_value": "mg_allclassic",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:32",
+            "field_type": "text"
+        },
+        {
+            "name": "Max Players",
+            "description": "Maximum number of players on the server.",
+            "env_variable": "MAX_PLAYERS",
+            "default_value": "32",
+            "user_viewable": true,
+            "user_editable": false,
+            "rules": "required|integer|min:1|max:128",
+            "field_type": "text"
+        },
+        {
+            "name": "No Bots",
+            "description": "Disable bots. 0 = Bots enabled | 1 = Bots disabled.",
+            "env_variable": "NOBOTS",
+            "default_value": "0",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|boolean",
+            "field_type": "text"
+        },
+        {
+            "name": "No Master",
+            "description": "Hide from Steam server browser. 0 = Listed | 1 = Hidden.",
+            "env_variable": "NOMASTER",
+            "default_value": "0",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|boolean",
+            "field_type": "text"
+        },
+        {
+            "name": "Insecure (No VAC)",
+            "description": "Disable VAC anti-cheat. 0 = VAC enabled | 1 = VAC disabled.",
+            "env_variable": "INSECURE",
+            "default_value": "0",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|boolean",
+            "field_type": "text"
+        },
+        {
+            "name": "No HLTV",
+            "description": "Disable SourceTV\/HLTV. 0 = HLTV enabled | 1 = HLTV disabled.",
+            "env_variable": "NOHLTV",
+            "default_value": "0",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|boolean",
+            "field_type": "text"
+        },
+        {
+            "name": "Install Metamod",
+            "description": "Install Metamod:Source during setup.",
+            "env_variable": "INSTALL_METAMOD",
+            "default_value": "true",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "required|in:true,false",
+            "field_type": "text"
+        },
+        {
+            "name": "Install SourceMod",
+            "description": "Install SourceMod during setup.",
+            "env_variable": "INSTALL_SOURCEMOD",
+            "default_value": "true",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "required|in:true,false",
+            "field_type": "text"
+        },
+        {
+            "name": "Install NoLobbyReservation",
+            "description": "Install NoLobbyReservation plugin during setup.",
+            "env_variable": "INSTALL_NOLOBBY",
+            "default_value": "true",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "required|in:true,false",
+            "field_type": "text"
+        },
+        {
+            "name": "Extra SteamCMD Flags",
+            "description": "Extra flags passed to steamcmd app_update (e.g. -beta prerelease).",
+            "env_variable": "EXTRA_FLAGS",
+            "default_value": "",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "nullable|string|max:128",
+            "field_type": "text"
+        }
+    ]
+}
