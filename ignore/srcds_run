@@ -4,60 +4,6 @@
 #
 #	a wrapper script for the main Source engine dedicated server binary.
 #	Performs auto-restarting of the server on crash. You can
-# crash guard
-CRASH_LIMIT=3
-CRASH_WINDOW=300
-
-CRASH_TS_FILE=".crash_timestamps"
-CRASH_LOG="logs/crash_guard.log"
-
-log_crash() {
-    mkdir -p logs
-    echo "[crash-guard] $(date '+%Y-%m-%d %H:%M:%S') $*" | tee -a "$CRASH_LOG"
-}
-
-record_crash() {
-    date +%s >> "$CRASH_TS_FILE"
-}
-
-crashes_in_window() {
-    now=$(date +%s)
-    cutoff=$(expr $now - $CRASH_WINDOW)
-    count=0
-    recent=""
-
-    if test -f "$CRASH_TS_FILE"; then
-        while read ts; do
-            if test "$ts" -ge "$cutoff" 2>/dev/null; then
-                recent="$recent $ts"
-                count=$(expr $count + 1)
-            fi
-        done < "$CRASH_TS_FILE"
-
-        > "$CRASH_TS_FILE"
-        for t in $recent; do
-            echo "$t" >> "$CRASH_TS_FILE"
-        done
-    fi
-
-    echo "$count"
-}
-
-clean_crash_dumps() {
-    dumps=$(find . -maxdepth 5 \( -name "*.mdmp" -o -name "core*" \) -type f 2>/dev/null | sort -r)
-
-    first=1
-    for f in $dumps; do
-        if test $first -eq 1; then
-            log_crash "Keeping latest dump: $f"
-            first=0
-        else
-            rm -f "$f"
-            log_crash "Deleted old dump: $f"
-        fi
-    done
-}
-
 #	extend this to log crashes and more.
 #
 
@@ -389,20 +335,8 @@ run() {
 			# Run the server
 			$HL_CMD
 			retval=$?
-			if test $retval -ne 0; then
-			    log_crash "Server crashed (exit $retval)"
-			    record_crash
-			    clean_crash_dumps
-			
-			    count=$(crashes_in_window)
-			    log_crash "Crashes in last ${CRASH_WINDOW}s: $count/$CRASH_LIMIT"
-			
-			    if test "$count" -ge "$CRASH_LIMIT"; then
-			        log_crash "Crash limit reached. Halting server."
-			        while true; do
-			            sleep 3600
-			        done
-			    fi
+			if test $retval -eq 0 && test -z "$AUTO_UPDATE"; then
+				break; # if 0 is returned then just quit
 			fi
 
 			debugcore $retval
