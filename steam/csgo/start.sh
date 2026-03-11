@@ -20,15 +20,30 @@ log() {
     echo "[crash-guard] $(date '+%Y-%m-%d %H:%M:%S') $*" | tee -a "${CRASH_LOG}"
 }
 
-# nuke any .mdmp / core dumps so they don't eat disk space
+# clean old crash dumps but keep the latest one for debugging
 clean_crash_dumps() {
     local count=0
+
+    # collect all dump files, sorted newest first
+    local dumps=()
     while IFS= read -r -d '' f; do
-        rm -f -- "$f" && (( count++ ))
+        dumps+=("$f")
     done < <(find "${CONTAINER_DIR}" -maxdepth 5 \
         -type f \( -name "*.mdmp" -o -name "core" -o -name "core.*" \) \
-        -print0 2>/dev/null)
-    [ "${count}" -gt 0 ] && log "Cleaned ${count} crash dump(s)."
+        -printf '%T@\t%p\0' 2>/dev/null | sort -z -t$'\t' -k1 -rn | cut -z -f2-)
+
+    # keep the newest one, delete the rest
+    local first=1
+    for f in "${dumps[@]}"; do
+        if [ "${first}" -eq 1 ]; then
+            first=0
+            log "Keeping latest crash dump: $(basename "$f")"
+            continue
+        fi
+        rm -f -- "$f" && (( count++ ))
+    done
+
+    [ "${count}" -gt 0 ] && log "Cleaned ${count} old crash dump(s)."
 }
 
 # count recent crashes, drop anything older than the window
